@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-observability"
+name = "aumos-agent-observability"
 version = "0.1.0"
 description = "OpenTelemetry-native agent tracing, cost attribution, and drift detection"
 readme = "README.md"
