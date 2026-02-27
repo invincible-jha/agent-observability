@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aumos/agent-observability:latest
+    image: ghcr.io/invincible-jha/agent-observability:latest
     container_name: agent-observability
     ports:
       - "8080:8080"
