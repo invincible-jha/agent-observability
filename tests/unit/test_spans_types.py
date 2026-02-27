@@ -248,10 +248,20 @@ class TestAgentSpan:
         assert result is agent_span
 
     def test_elapsed_seconds_increases_over_time(self) -> None:
-        agent_span, _ = self._make_span()
-        t0 = agent_span.elapsed_seconds
-        time.sleep(0.01)
-        t1 = agent_span.elapsed_seconds
+        """elapsed_seconds must grow as the monotonic clock advances.
+
+        Using unittest.mock.patch to control time.monotonic avoids any
+        dependency on the OS scheduler or sleep precision, making the test
+        fully deterministic regardless of machine load or platform.
+        """
+        monotonic_values = iter([1000.0, 1000.0, 1000.5])
+
+        with patch("agent_observability.spans.types.time") as mock_time:
+            mock_time.monotonic.side_effect = monotonic_values
+            agent_span, _ = self._make_span()   # consumes 1000.0 for _start_time
+            t0 = agent_span.elapsed_seconds     # 1000.0 - 1000.0 == 0.0
+            t1 = agent_span.elapsed_seconds     # 1000.5 - 1000.0 == 0.5
+
         assert t1 > t0
 
     def test_stable_hash_returns_16_char_hex(self) -> None:
