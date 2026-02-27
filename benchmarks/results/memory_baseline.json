@@ -1,0 +1,27 @@
+{
+  "benchmark": "memory_overhead",
+  "span_counts": [
+    100,
+    1000,
+    10000
+  ],
+  "seed": 42,
+  "results_by_span_count": {
+    "100": {
+      "net_bytes_total": 10848,
+      "bytes_per_span": 108.48,
+      "kb_total": 10.59
+    },
+    "1000": {
+      "net_bytes_total": 10848,
+      "bytes_per_span": 10.85,
+      "kb_total": 10.59
+    },
+    "10000": {
+      "net_bytes_total": 10816,
+      "bytes_per_span": 1.08,
+      "kb_total": 10.56
+    }
+  },
+  "note": "Measured via tracemalloc (stdlib). Net bytes may be negative when GC collects other objects during the measurement window. Langfuse #9766 noted unbounded queue growth under stalled exporters; agent-observability uses a no-op span lifecycle in the NoOp path."
+}

@@ -1,0 +1,18 @@
+{
+  "benchmark": "trace_overhead",
+  "n_iterations": 2000,
+  "baseline_us": {
+    "p50": 0.1,
+    "p95": 0.1,
+    "p99": 0.2,
+    "mean": 0.1
+  },
+  "traced_us": {
+    "p50": 2.3,
+    "p95": 2.5,
+    "p99": 2.9,
+    "mean": 2.284
+  },
+  "overhead_percent": 2179.39,
+  "note": "Langfuse sync SDK showed 2-4x overhead (issues #9429, #9766). agent-observability uses NoOp spans when OTel SDK absent, so overhead is pure Python object lifecycle cost."
+}

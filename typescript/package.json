@@ -1,0 +1,33 @@
+{
+  "name": "@aumos/agent-observability-client",
+  "version": "0.1.0",
+  "description": "TypeScript HTTP client for the agent-observability server mode API",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "aumos",
+    "agent-observability",
+    "tracing",
+    "cost-tracking",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aumos-ai/agent-observability"
+  }
+}
