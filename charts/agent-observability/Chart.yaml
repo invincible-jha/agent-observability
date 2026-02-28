@@ -1,0 +1,12 @@
+apiVersion: v2
+name: agent-observability
+description: OpenTelemetry-native agent tracing and cost attribution
+type: application
+version: 0.1.0
+appVersion: "0.2.0"
+home: https://github.com/invincible-jha/agent-observability
+sources:
+  - https://github.com/invincible-jha/agent-observability
+maintainers:
+  - name: AumOS
+    url: https://github.com/invincible-jha
