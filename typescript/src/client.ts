@@ -1,36 +1,35 @@
 /**
- * HTTP client for the agent-observability server mode API.
+ * HTTP client for the agent-observability API.
  *
  * Uses the Fetch API (available natively in Node 18+, browsers, and Deno).
  * No external dependencies required.
  *
  * @example
  * ```ts
- * import { createObservabilityClient } from "@aumos/agent-observability-client";
+ * import { createAgentObservabilityClient } from "@aumos/agent-observability";
  *
- * const client = createObservabilityClient({ baseUrl: "http://localhost:8080" });
+ * const client = createAgentObservabilityClient({ baseUrl: "http://localhost:8080" });
  *
- * const result = await client.createTrace({
- *   agent_id: "my-agent",
- *   provider: "openai",
- *   model: "gpt-4o",
- *   input_tokens: 500,
- *   output_tokens: 200,
- * });
+ * const traces = await client.getTraces({ agentId: "my-agent", limit: 50 });
+ * if (traces.ok) {
+ *   console.log(`Found ${traces.data.total} traces`);
+ * }
  *
- * if (result.ok) {
- *   console.log("Trace created:", result.data.trace_id);
+ * const costs = await client.getCostReport({ agentId: "my-agent" });
+ * if (costs.ok) {
+ *   console.log(`Total cost: $${costs.data.total_cost_usd.toFixed(4)}`);
  * }
  * ```
  */
 
 import type {
+  AgentSpanKind,
   ApiError,
   ApiResult,
-  CostSummary,
-  CreateTraceRequest,
-  HealthStatus,
-  Trace,
+  CostAttribution,
+  DriftReport,
+  FleetStatus,
+  TraceExport,
   TraceListResponse,
 } from "./types.js";
 
@@ -38,14 +37,12 @@ import type {
 // Client configuration
 // ---------------------------------------------------------------------------
 
-/** Configuration options for the ObservabilityClient. */
-export interface ObservabilityClientConfig {
+/** Configuration options for the AgentObservabilityClient. */
+export interface AgentObservabilityClientConfig {
   /** Base URL of the agent-observability server (e.g. "http://localhost:8080"). */
   readonly baseUrl: string;
-
-  /** Optional request timeout in milliseconds (default: 10000). */
+  /** Optional request timeout in milliseconds (default: 30000). */
   readonly timeoutMs?: number;
-
   /** Optional extra HTTP headers sent with every request. */
   readonly headers?: Readonly<Record<string, string>>;
 }
@@ -82,23 +79,22 @@ async function fetchJson<T>(
 
     return { ok: true, data: body as T };
   } catch (err: unknown) {
+    clearTimeout(timeoutId);
     const message = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       error: { error: "Network error", detail: message },
       status: 0,
     };
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
 function buildHeaders(
-  extraHeaders: Readonly<Record<string, string>> | undefined
+  extraHeaders: Readonly<Record<string, string>> | undefined,
 ): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    "Accept": "application/json",
+    Accept: "application/json",
     ...extraHeaders,
   };
 }
@@ -108,52 +104,77 @@ function buildHeaders(
 // ---------------------------------------------------------------------------
 
 /** Typed HTTP client for the agent-observability server. */
-export interface ObservabilityClient {
+export interface AgentObservabilityClient {
   /**
-   * Create a new trace record.
+   * Retrieve a paginated list of traces with optional filtering.
    *
-   * @param request - Trace creation parameters.
-   * @returns The created trace with its assigned trace_id.
-   */
-  createTrace(request: CreateTraceRequest): Promise<ApiResult<Trace>>;
-
-  /**
-   * Retrieve a single trace by ID.
-   *
-   * @param traceId - The trace identifier.
-   * @returns The full trace record.
-   */
-  getTrace(traceId: string): Promise<ApiResult<Trace>>;
-
-  /**
-   * List traces with optional filtering.
+   * Results are ordered by timestamp descending (most recent first).
+   * Use the `kind` filter to narrow to a specific agent span type such
+   * as "llm.call" or "tool.invoke".
    *
    * @param options - Optional filter parameters.
-   * @returns Paginated list of traces.
+   * @returns A TraceListResponse with matching traces and total count.
    */
-  listTraces(options?: {
+  getTraces(options?: {
     agentId?: string;
+    sessionId?: string;
+    kind?: AgentSpanKind;
+    since?: number;
+    until?: number;
     limit?: number;
   }): Promise<ApiResult<TraceListResponse>>;
 
   /**
-   * Retrieve aggregated cost summary.
+   * Retrieve aggregated cost attribution data.
+   *
+   * Returns cost breakdowns by model, provider, agent, and operation
+   * across all LLM calls matching the filter criteria.
    *
    * @param options - Optional filter parameters.
-   * @returns Aggregated cost summary.
+   * @returns A CostAttribution record with per-dimension breakdowns.
    */
-  getCosts(options?: {
+  getCostReport(options?: {
     agentId?: string;
     since?: number;
     until?: number;
-  }): Promise<ApiResult<CostSummary>>;
+  }): Promise<ApiResult<CostAttribution>>;
 
   /**
-   * Check server health.
+   * Run a behavioural drift analysis for an agent.
    *
-   * @returns Health status of the agent-observability server.
+   * Compares the agent's recent spans against the stored baseline using
+   * Z-score analysis. Returns a DriftReport with per-feature Z-scores
+   * and a qualitative severity label.
+   *
+   * @param agentId - The agent to analyse.
+   * @param options - Optional window and threshold parameters.
+   * @returns A DriftReport with drift status, Z-scores, and severity.
    */
-  health(): Promise<ApiResult<HealthStatus>>;
+  getDriftAnalysis(
+    agentId: string,
+    options?: {
+      windowSpans?: number;
+      sigmaThreshold?: number;
+    },
+  ): Promise<ApiResult<DriftReport>>;
+
+  /**
+   * Retrieve fleet-level health status for all tracked agents.
+   *
+   * Aggregates drift status, cost totals, and span counts per agent.
+   * Useful for dashboard views and alerting on fleet-wide anomalies.
+   *
+   * @returns A FleetStatus record with per-agent health summaries.
+   */
+  getFleetStatus(): Promise<ApiResult<FleetStatus>>;
+
+  /**
+   * Export all spans for a specific trace in OTLP-compatible JSON format.
+   *
+   * @param traceId - The OTel trace ID (hex string).
+   * @returns The full TraceExport with all child spans.
+   */
+  exportTraces(traceId: string): Promise<ApiResult<TraceExport>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,44 +185,49 @@ export interface ObservabilityClient {
  * Create a typed HTTP client for the agent-observability server.
  *
  * @param config - Client configuration including base URL.
- * @returns An ObservabilityClient instance.
+ * @returns An AgentObservabilityClient instance.
  */
-export function createObservabilityClient(
-  config: ObservabilityClientConfig
-): ObservabilityClient {
-  const { baseUrl, timeoutMs = 10_000, headers: extraHeaders } = config;
+export function createAgentObservabilityClient(
+  config: AgentObservabilityClientConfig,
+): AgentObservabilityClient {
+  const { baseUrl, timeoutMs = 30_000, headers: extraHeaders } = config;
   const baseHeaders = buildHeaders(extraHeaders);
 
   return {
-    async createTrace(request: CreateTraceRequest): Promise<ApiResult<Trace>> {
-      return fetchJson<Trace>(
-        `${baseUrl}/traces`,
-        {
-          method: "POST",
-          headers: baseHeaders,
-          body: JSON.stringify(request),
-        },
-        timeoutMs,
-      );
-    },
-
-    async getTrace(traceId: string): Promise<ApiResult<Trace>> {
-      return fetchJson<Trace>(
-        `${baseUrl}/traces/${encodeURIComponent(traceId)}`,
-        { method: "GET", headers: baseHeaders },
-        timeoutMs,
-      );
-    },
-
-    async listTraces(
-      options: { agentId?: string; limit?: number } = {}
+    async getTraces(
+      options: {
+        agentId?: string;
+        sessionId?: string;
+        kind?: AgentSpanKind;
+        since?: number;
+        until?: number;
+        limit?: number;
+      } = {},
     ): Promise<ApiResult<TraceListResponse>> {
       const params = new URLSearchParams();
-      if (options.agentId !== undefined) params.set("agent_id", options.agentId);
-      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      if (options.agentId !== undefined) {
+        params.set("agent_id", options.agentId);
+      }
+      if (options.sessionId !== undefined) {
+        params.set("session_id", options.sessionId);
+      }
+      if (options.kind !== undefined) {
+        params.set("kind", options.kind);
+      }
+      if (options.since !== undefined) {
+        params.set("since", String(options.since));
+      }
+      if (options.until !== undefined) {
+        params.set("until", String(options.until));
+      }
+      if (options.limit !== undefined) {
+        params.set("limit", String(options.limit));
+      }
 
       const queryString = params.toString();
-      const url = queryString ? `${baseUrl}/traces?${queryString}` : `${baseUrl}/traces`;
+      const url = queryString
+        ? `${baseUrl}/traces?${queryString}`
+        : `${baseUrl}/traces`;
 
       return fetchJson<TraceListResponse>(
         url,
@@ -210,27 +236,62 @@ export function createObservabilityClient(
       );
     },
 
-    async getCosts(
-      options: { agentId?: string; since?: number; until?: number } = {}
-    ): Promise<ApiResult<CostSummary>> {
+    async getCostReport(
+      options: { agentId?: string; since?: number; until?: number } = {},
+    ): Promise<ApiResult<CostAttribution>> {
       const params = new URLSearchParams();
-      if (options.agentId !== undefined) params.set("agent_id", options.agentId);
-      if (options.since !== undefined) params.set("since", String(options.since));
-      if (options.until !== undefined) params.set("until", String(options.until));
+      if (options.agentId !== undefined) {
+        params.set("agent_id", options.agentId);
+      }
+      if (options.since !== undefined) {
+        params.set("since", String(options.since));
+      }
+      if (options.until !== undefined) {
+        params.set("until", String(options.until));
+      }
 
       const queryString = params.toString();
-      const url = queryString ? `${baseUrl}/costs?${queryString}` : `${baseUrl}/costs`;
+      const url = queryString
+        ? `${baseUrl}/costs?${queryString}`
+        : `${baseUrl}/costs`;
 
-      return fetchJson<CostSummary>(
+      return fetchJson<CostAttribution>(
         url,
         { method: "GET", headers: baseHeaders },
         timeoutMs,
       );
     },
 
-    async health(): Promise<ApiResult<HealthStatus>> {
-      return fetchJson<HealthStatus>(
-        `${baseUrl}/health`,
+    async getDriftAnalysis(
+      agentId: string,
+      options: { windowSpans?: number; sigmaThreshold?: number } = {},
+    ): Promise<ApiResult<DriftReport>> {
+      const params = new URLSearchParams({ agent_id: agentId });
+      if (options.windowSpans !== undefined) {
+        params.set("window_spans", String(options.windowSpans));
+      }
+      if (options.sigmaThreshold !== undefined) {
+        params.set("sigma_threshold", String(options.sigmaThreshold));
+      }
+
+      return fetchJson<DriftReport>(
+        `${baseUrl}/drift/analysis?${params.toString()}`,
+        { method: "GET", headers: baseHeaders },
+        timeoutMs,
+      );
+    },
+
+    async getFleetStatus(): Promise<ApiResult<FleetStatus>> {
+      return fetchJson<FleetStatus>(
+        `${baseUrl}/fleet/status`,
+        { method: "GET", headers: baseHeaders },
+        timeoutMs,
+      );
+    },
+
+    async exportTraces(traceId: string): Promise<ApiResult<TraceExport>> {
+      return fetchJson<TraceExport>(
+        `${baseUrl}/traces/${encodeURIComponent(traceId)}/export`,
         { method: "GET", headers: baseHeaders },
         timeoutMs,
       );
@@ -238,5 +299,12 @@ export function createObservabilityClient(
   };
 }
 
-/** Type alias re-export for convenience. */
-export type { CreateTraceRequest, Trace, TraceListResponse, CostSummary, HealthStatus };
+/** Re-export types for convenience. */
+export type {
+  AgentSpanKind,
+  TraceExport,
+  TraceListResponse,
+  CostAttribution,
+  DriftReport,
+  FleetStatus,
+};

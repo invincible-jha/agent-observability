@@ -1,7 +1,7 @@
 {
-  "name": "@aumos/agent-observability-client",
+  "name": "@aumos/agent-observability",
   "version": "0.1.0",
-  "description": "TypeScript HTTP client for the agent-observability server mode API",
+  "description": "TypeScript client for the AumOS agent-observability framework — distributed tracing, cost attribution, and drift detection",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,8 +22,11 @@
   "keywords": [
     "aumos",
     "agent-observability",
+    "opentelemetry",
     "tracing",
-    "cost-tracking",
+    "cost-attribution",
+    "drift-detection",
+    "llm-observability",
     "typescript"
   ],
   "repository": {

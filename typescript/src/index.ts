@@ -1,23 +1,30 @@
 /**
- * @aumos/agent-observability-client
+ * @aumos/agent-observability
  *
- * TypeScript HTTP client for the agent-observability server mode API.
+ * TypeScript client for the AumOS agent-observability framework.
+ * Provides distributed tracing, cost attribution, drift detection,
+ * and fleet health monitoring for AI agents.
  */
 
+// Client and configuration
 export type {
-  ObservabilityClientConfig,
-  ObservabilityClient,
-  CreateTraceRequest,
-  Trace,
-  TraceListResponse,
-  CostSummary,
-  HealthStatus,
+  AgentObservabilityClient,
+  AgentObservabilityClientConfig,
 } from "./client.js";
+export { createAgentObservabilityClient } from "./client.js";
 
-export { createObservabilityClient } from "./client.js";
-
+// Core observability types
 export type {
-  SpanData,
+  AgentSpanKind,
+  AgentSpan,
+  TraceExport,
+  TraceListResponse,
+  CostRecord,
+  CostAttribution,
+  DriftSeverity,
+  DriftReport,
+  AgentHealthSummary,
+  FleetStatus,
   ApiError,
   ApiResult,
 } from "./types.js";
