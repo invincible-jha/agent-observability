@@ -1,0 +1,483 @@
+openapi: "3.1.0"
+
+info:
+  title: Agent Observability API
+  version: "0.2.0"
+  description: |
+    HTTP API for the agent-observability server. Provides endpoints for
+    creating and querying distributed traces and aggregated cost summaries
+    across agent LLM calls.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: traces
+    description: Create and retrieve distributed trace records
+  - name: costs
+    description: Query aggregated LLM cost summaries
+  - name: health
+    description: Server health check
+
+paths:
+  /traces:
+    post:
+      tags: [traces]
+      operationId: createTrace
+      summary: Create a new trace record
+      description: |
+        Records a new trace for an LLM call or agent operation.
+        If provider and model are both present, a cost entry is also recorded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTraceRequest"
+            example:
+              agent_id: "agent-abc"
+              session_id: "session-xyz"
+              task_id: "task-001"
+              service_name: "summarizer"
+              provider: "anthropic"
+              model: "claude-sonnet-4-6"
+              input_tokens: 1200
+              output_tokens: 350
+              cached_input_tokens: 0
+              cost_usd: 0.0042
+              operation: "llm_call"
+              tags:
+                environment: "production"
+                team: "platform"
+      responses:
+        "201":
+          description: Trace created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceResponse"
+              example:
+                trace_id: "550e8400-e29b-41d4-a716-446655440000"
+                agent_id: "agent-abc"
+                session_id: "session-xyz"
+                task_id: "task-001"
+                service_name: "summarizer"
+                provider: "anthropic"
+                model: "claude-sonnet-4-6"
+                input_tokens: 1200
+                output_tokens: 350
+                cached_input_tokens: 0
+                cost_usd: 0.0042
+                operation: "llm_call"
+                tags:
+                  environment: "production"
+                timestamp: 1700000000.0
+                spans: []
+        "422":
+          description: Validation error in request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags: [traces]
+      operationId: listTraces
+      summary: List traces with optional filtering
+      description: Returns a paginated list of trace records, optionally filtered by agent_id.
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          description: Filter traces by agent identifier
+          schema:
+            type: string
+          example: "agent-abc"
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of traces to return (default 100)
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+          example: 50
+      responses:
+        "200":
+          description: List of trace records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceListResponse"
+              example:
+                traces:
+                  - trace_id: "550e8400-e29b-41d4-a716-446655440000"
+                    agent_id: "agent-abc"
+                    session_id: "session-xyz"
+                    task_id: "task-001"
+                    service_name: "summarizer"
+                    provider: "anthropic"
+                    model: "claude-sonnet-4-6"
+                    input_tokens: 1200
+                    output_tokens: 350
+                    cached_input_tokens: 0
+                    cost_usd: 0.0042
+                    operation: "llm_call"
+                    tags: {}
+                    timestamp: 1700000000.0
+                    spans: []
+                total: 1
+
+  /traces/{trace_id}:
+    get:
+      tags: [traces]
+      operationId: getTrace
+      summary: Retrieve a specific trace record
+      description: Returns the full trace record for the given trace_id.
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          description: UUID of the trace to retrieve
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Trace record found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceResponse"
+        "404":
+          description: Trace not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Not found"
+                detail: "Trace '550e8400-e29b-41d4-a716-446655440000' not found."
+
+  /costs:
+    get:
+      tags: [costs]
+      operationId: getCosts
+      summary: Get aggregated cost summary
+      description: |
+        Returns aggregated LLM cost data across all recorded traces.
+        Optionally filtered by agent_id and a Unix timestamp range.
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          description: Filter costs for a specific agent
+          schema:
+            type: string
+          example: "agent-abc"
+        - name: since
+          in: query
+          required: false
+          description: Unix epoch lower bound (inclusive) for the time range filter
+          schema:
+            type: number
+            format: double
+          example: 1700000000.0
+        - name: until
+          in: query
+          required: false
+          description: Unix epoch upper bound (inclusive) for the time range filter
+          schema:
+            type: number
+            format: double
+          example: 1700086400.0
+      responses:
+        "200":
+          description: Aggregated cost summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CostSummaryResponse"
+              example:
+                total_cost_usd: 1.2345
+                total_input_tokens: 50000
+                total_output_tokens: 15000
+                total_tokens: 65000
+                record_count: 42
+                by_model:
+                  "claude-sonnet-4-6": 0.98
+                  "claude-opus-4-6": 0.2545
+                by_provider:
+                  "anthropic": 1.2345
+                by_agent:
+                  "agent-abc": 0.75
+                  "agent-def": 0.4845
+                by_operation:
+                  "llm_call": 1.1
+                  "embedding": 0.1345
+
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Health check
+      description: Returns server status and current trace count.
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: "ok"
+                service: "agent-observability"
+                version: "0.1.0"
+                trace_count: 128
+
+components:
+  schemas:
+    CreateTraceRequest:
+      type: object
+      description: Request body for creating a new trace record.
+      properties:
+        agent_id:
+          type: string
+          default: ""
+          description: Identifier of the agent emitting the trace
+        session_id:
+          type: string
+          default: ""
+          description: Session identifier grouping related traces
+        task_id:
+          type: string
+          default: ""
+          description: Task identifier for task-scoped cost tracking
+        service_name:
+          type: string
+          default: "agent"
+          description: Logical service name for this trace
+        provider:
+          type: string
+          default: ""
+          description: LLM provider (e.g. "anthropic", "openai")
+        model:
+          type: string
+          default: ""
+          description: Model identifier (e.g. "claude-sonnet-4-6")
+        input_tokens:
+          type: integer
+          default: 0
+          minimum: 0
+          description: Number of input/prompt tokens consumed
+        output_tokens:
+          type: integer
+          default: 0
+          minimum: 0
+          description: Number of output/completion tokens generated
+        cached_input_tokens:
+          type: integer
+          default: 0
+          minimum: 0
+          description: Number of input tokens served from cache
+        cost_usd:
+          type: number
+          format: double
+          nullable: true
+          description: Explicit cost override in USD; computed from token counts if omitted
+        operation:
+          type: string
+          default: "llm_call"
+          description: Operation type label (e.g. "llm_call", "embedding", "rerank")
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+          description: Arbitrary string key-value labels
+
+    SpanData:
+      type: object
+      description: A single span within a trace.
+      required: [span_id, name]
+      properties:
+        span_id:
+          type: string
+          description: Unique identifier for this span
+        name:
+          type: string
+          description: Human-readable span name
+        kind:
+          type: string
+          default: ""
+          description: Span kind (e.g. "client", "server", "internal")
+        attributes:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: integer
+              - type: number
+              - type: boolean
+          default: {}
+          description: Span-level attributes
+
+    TraceResponse:
+      type: object
+      description: Full trace record.
+      required:
+        - trace_id
+        - agent_id
+        - session_id
+        - task_id
+        - service_name
+        - provider
+        - model
+        - input_tokens
+        - output_tokens
+        - cached_input_tokens
+        - cost_usd
+        - operation
+        - timestamp
+      properties:
+        trace_id:
+          type: string
+          format: uuid
+          description: Unique trace identifier
+        agent_id:
+          type: string
+        session_id:
+          type: string
+        task_id:
+          type: string
+        service_name:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        cached_input_tokens:
+          type: integer
+        cost_usd:
+          type: number
+          format: double
+        operation:
+          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+        timestamp:
+          type: number
+          format: double
+          description: Unix epoch seconds when the trace was recorded
+        spans:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanData"
+          default: []
+
+    TraceListResponse:
+      type: object
+      description: Paginated list of trace records.
+      required: [traces, total]
+      properties:
+        traces:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceResponse"
+        total:
+          type: integer
+          description: Number of traces returned in this response
+
+    CostSummaryResponse:
+      type: object
+      description: Aggregated cost summary across matching trace records.
+      required:
+        - total_cost_usd
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - record_count
+      properties:
+        total_cost_usd:
+          type: number
+          format: double
+        total_input_tokens:
+          type: integer
+        total_output_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        record_count:
+          type: integer
+        by_model:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          default: {}
+          description: Cost breakdown by model identifier
+        by_provider:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          default: {}
+          description: Cost breakdown by provider
+        by_agent:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          default: {}
+          description: Cost breakdown by agent_id
+        by_operation:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          default: {}
+          description: Cost breakdown by operation type
+
+    HealthResponse:
+      type: object
+      description: Server health information.
+      required: [status, service, version, trace_count]
+      properties:
+        status:
+          type: string
+          default: "ok"
+        service:
+          type: string
+          default: "agent-observability"
+        version:
+          type: string
+          default: "0.1.0"
+        trace_count:
+          type: integer
+          description: Number of traces currently stored in memory
+
+    ErrorResponse:
+      type: object
+      description: Standard error response body.
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Short error category label
+        detail:
+          type: string
+          default: ""
+          description: Human-readable detail message
