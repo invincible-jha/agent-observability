@@ -299,12 +299,3 @@ export function createAgentObservabilityClient(
   };
 }
 
-/** Re-export types for convenience. */
-export type {
-  AgentSpanKind,
-  TraceExport,
-  TraceListResponse,
-  CostAttribution,
-  DriftReport,
-  FleetStatus,
-};
