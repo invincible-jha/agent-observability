@@ -21,6 +21,14 @@ Part of the [AumOS](https://github.com/aumos-ai) open-source agent infrastructur
 - Auto-instrumentation modules for LangChain, CrewAI, AutoGen, Anthropic SDK, OpenAI SDK, and MCP — call `instrument()` once and all framework calls emit spans automatically
 - Pre-built Grafana dashboard definitions for agent throughput, cost trends, error rates, and drift alerts
 
+## Current Limitations
+
+> **Transparency note**: We list known limitations to help you evaluate fit.
+
+- **Storage**: In-memory trace storage only — no persistent backend. Traces lost on restart.
+- **Export**: OTLP export only. No direct Jaeger/Zipkin/Datadog export.
+- **UI**: No built-in web dashboard. Requires external tools (Grafana, Jaeger UI) for visualization.
+
 ## Quick Start
 
 Install from PyPI:

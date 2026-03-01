@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Observability Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <div class="logo">aumos <span>| observability</span></div>
+    <nav>
+      <button class="tab-btn active" data-tab="traces">Traces</button>
+      <button class="tab-btn" data-tab="spans">Span Tree</button>
+      <button class="tab-btn" data-tab="costs">Cost Breakdown</button>
+      <button class="tab-btn" data-tab="latency">Latency</button>
+    </nav>
+    <span class="refresh-info" id="last-refresh">Loading...</span>
+  </header>
+
+  <main>
+    <!-- Traces Tab -->
+    <div class="tab-panel active" id="tab-traces">
+      <div class="stats-row" id="trace-stats">
+        <div class="stat-card">
+          <div class="stat-label">Total Traces</div>
+          <div class="stat-value" id="stat-traces">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Spans</div>
+          <div class="stat-value" id="stat-spans">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Cost</div>
+          <div class="stat-value" id="stat-cost">-</div>
+          <div class="stat-sub">USD</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">P95 Latency</div>
+          <div class="stat-value" id="stat-p95">-</div>
+          <div class="stat-sub">ms</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          Recent Traces
+          <button class="btn btn-ghost" onclick="loadTraces()" style="margin-left:auto;font-size:12px;padding:4px 10px">Refresh</button>
+        </div>
+        <div class="search-row">
+          <input class="search-input" id="trace-agent-filter" placeholder="Filter by agent ID..." />
+          <button class="btn" onclick="loadTraces()">Filter</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Trace ID</th>
+                <th>Agent</th>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>In Tokens</th>
+                <th>Out Tokens</th>
+                <th>Cost (USD)</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="traces-tbody">
+              <tr><td colspan="8" class="empty-state">Loading traces...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spans Tab -->
+    <div class="tab-panel" id="tab-spans">
+      <div class="card">
+        <div class="card-title">Span Tree</div>
+        <div class="search-row">
+          <input class="search-input" id="span-trace-filter" placeholder="Filter by trace ID..." />
+          <button class="btn" onclick="loadSpans()">Filter</button>
+          <button class="btn btn-ghost" onclick="loadSpans()">Refresh</button>
+        </div>
+        <div id="span-tree-container">
+          <div class="empty-state"><div class="icon">&#128203;</div>No spans yet. Instrument your agents and traces will appear here.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cost Breakdown Tab -->
+    <div class="tab-panel" id="tab-costs">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Cost by Model</div>
+          <div class="chart-container">
+            <canvas id="cost-pie-chart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Cost Summary</div>
+          <table>
+            <thead>
+              <tr><th>Model</th><th>Cost (USD)</th><th>Share</th></tr>
+            </thead>
+            <tbody id="cost-tbody">
+              <tr><td colspan="3" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+            <strong>Total: </strong><span id="cost-total">$0.000000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Latency Tab -->
+    <div class="tab-panel" id="tab-latency">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Latency Histogram (ms)</div>
+          <div class="chart-container">
+            <canvas id="latency-histogram"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Latency Stats</div>
+          <table>
+            <thead><tr><th>Metric</th><th>Value (ms)</th></tr></thead>
+            <tbody id="latency-stats-tbody">
+              <tr><td colspan="2" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

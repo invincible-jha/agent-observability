@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import time
 import urllib.error
 import urllib.request
@@ -27,11 +28,33 @@ _CONTENT_TYPE = "application/json"
 _DEFAULT_TIMEOUT_SECONDS = 10
 
 
-def _agent_span_to_otlp_dict(span: AgentSpan) -> dict[str, object]:
+def _generate_trace_id() -> str:
+    """Generate a 128-bit trace ID as 32 lowercase hex chars."""
+    return secrets.token_hex(16)
+
+
+def _generate_span_id() -> str:
+    """Generate a 64-bit span ID as 16 lowercase hex chars."""
+    return secrets.token_hex(8)
+
+
+def _agent_span_to_otlp_dict(
+    span: AgentSpan,
+    trace_id: Optional[str] = None,
+) -> dict[str, object]:
     """Convert an :class:`AgentSpan` to an OTLP-compatible span dict.
 
     This produces a structure matching the OTLP JSON encoding for a single
     span as described in the OpenTelemetry proto specification.
+
+    Parameters
+    ----------
+    span:
+        The agent span to convert.
+    trace_id:
+        Optional 32-char hex trace ID to use for batch correlation.  When
+        provided all spans in the same batch share this ID.  When omitted a
+        fresh random ID is generated for the span.
     """
     # Pull attributes from the underlying _NoOpSpan if available
     underlying = span._span
@@ -56,9 +79,11 @@ def _agent_span_to_otlp_dict(span: AgentSpan) -> dict[str, object]:
     now_ns = int(time.time() * 1e9)
     elapsed_ns = int(span.elapsed_seconds * 1e9)
 
+    resolved_trace_id: str = trace_id if trace_id is not None else _generate_trace_id()
+
     return {
-        "traceId": "00000000000000000000000000000000",
-        "spanId": "0000000000000000",
+        "traceId": resolved_trace_id,
+        "spanId": _generate_span_id(),
         "name": attributes_raw.get("agent.span.kind", "agent.span"),
         "kind": 1,  # SPAN_KIND_INTERNAL
         "startTimeUnixNano": str(now_ns - elapsed_ns),
@@ -150,8 +175,13 @@ class OTLPExporter:
             logger.warning("OTLPExporter: unexpected error — %s", exc)
 
     def _build_payload(self, spans: list[AgentSpan]) -> dict[str, object]:
-        """Build the OTLP resource spans payload."""
-        span_dicts = [_agent_span_to_otlp_dict(s) for s in spans]
+        """Build the OTLP resource spans payload.
+
+        All spans in a single export batch share the same trace ID so they are
+        correlated as one logical trace in any downstream collector.
+        """
+        batch_trace_id = _generate_trace_id()
+        span_dicts = [_agent_span_to_otlp_dict(s, trace_id=batch_trace_id) for s in spans]
 
         return {
             "resourceSpans": [
